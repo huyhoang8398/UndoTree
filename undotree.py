@@ -3,22 +3,19 @@ import sublime_plugin
 import difflib
 import threading
 
-# =============================
-# Globals
-# =============================
 undo_trees = {}
 lock = threading.Lock()
 PREVIEW_PANEL_NAME = "undotree_diff_preview"
 
-# =============================
+
 # Undo Tree Structures
-# =============================
 class UndoNode:
     def __init__(self, text, diff, parent=None):
         self.text = text
         self.diff = diff
         self.parent = parent
         self.children = []
+
 
 class UndoTree:
     def __init__(self, text):
@@ -38,16 +35,11 @@ class UndoTree:
         self.current = node
 
     def make_diff(self, old, new):
-        diff = difflib.unified_diff(
-            old.splitlines(),
-            new.splitlines(),
-            lineterm=""
-        )
+        diff = difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="")
         return "\n".join(diff)
 
-# =============================
+
 # Event listener
-# =============================
 class UndoTreeListener(sublime_plugin.EventListener):
     def on_load_async(self, view):
         """Create initial node when file is opened"""
@@ -71,10 +63,8 @@ class UndoTreeListener(sublime_plugin.EventListener):
     def on_post_save_as_async(self, view):
         self.on_post_save_async(view)
 
-# =============================
-# UndoTree UI Command
-# =============================
 
+# UndoTree UI Command
 class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
     def run(self):
         self.view = self.window.active_view()
@@ -91,7 +81,7 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
 
         # Display lines with indentation + counter
         items = []
-        for idx, (node, depth) in enumerate(self.nodes, 1):  # start counter from 1
+        for idx, (node, depth) in enumerate(self.nodes, 1):
             prefix = "  " * depth
             summary = self.summarize(node.diff)
             marker = "*" if node == self.tree.current else " "
@@ -101,19 +91,11 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
         # Show quick panel with hover preview if supported
         try:
             self.window.show_quick_panel(
-                items,
-                self.on_select,
-                sublime.MONOSPACE_FONT,
-                -1,
-                self.on_highlight
+                items, self.on_select, sublime.MONOSPACE_FONT, -1, self.on_highlight
             )
         except TypeError:
             # fallback for older builds
-            self.window.show_quick_panel(
-                items,
-                self.on_select,
-                sublime.MONOSPACE_FONT
-            )
+            self.window.show_quick_panel(items, self.on_select, sublime.MONOSPACE_FONT)
 
     def flatten(self, node, depth=0):
         self.nodes.append((node, depth))
@@ -123,8 +105,16 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
     def summarize(self, diff):
         if diff == "Initial state":
             return "Initial state"
-        added = sum(1 for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++"))
-        removed = sum(1 for l in diff.splitlines() if l.startswith("-") and not l.startswith("---"))
+        added = sum(
+            1
+            for l in diff.splitlines()
+            if l.startswith("+") and not l.startswith("+++")
+        )
+        removed = sum(
+            1
+            for l in diff.splitlines()
+            if l.startswith("-") and not l.startswith("---")
+        )
         return f"+{added:<3}  -{removed:<3}"
 
     # Called when user presses Enter
@@ -151,21 +141,17 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
         panel.assign_syntax("Packages/Diff/Diff.sublime-syntax")
         self.window.run_command("show_panel", {"panel": "output." + PREVIEW_PANEL_NAME})
 
-# =============================
+
 # Text commands
-# =============================
 class UndotreeWritePreviewCommand(sublime_plugin.TextCommand):
     def run(self, edit, text):
         self.view.replace(
             edit,
             sublime.Region(0, self.view.size()),
-            text if text != "Initial state" else "Initial state\n"
+            text if text != "Initial state" else "Initial state\n",
         )
+
 
 class UndoTreeRestoreCommand(sublime_plugin.TextCommand):
     def run(self, edit, text):
-        self.view.replace(
-            edit,
-            sublime.Region(0, self.view.size()),
-            text
-        )
+        self.view.replace(edit, sublime.Region(0, self.view.size()), text)
