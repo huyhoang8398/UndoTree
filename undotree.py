@@ -3,10 +3,16 @@ import sublime_plugin
 import difflib
 import threading
 
+# =============================
+# Globals
+# =============================
 undo_trees = {}
 lock = threading.Lock()
 PREVIEW_PANEL_NAME = "undotree_diff_preview"
 
+# =============================
+# Undo Tree Structures
+# =============================
 class UndoNode:
     def __init__(self, text, diff, parent=None):
         self.text = text
@@ -39,10 +45,12 @@ class UndoTree:
         )
         return "\n".join(diff)
 
-# Event listener (file open + save)
+# =============================
+# Event listener
+# =============================
 class UndoTreeListener(sublime_plugin.EventListener):
     def on_load_async(self, view):
-        """Create initial undo node when file is opened"""
+        """Create initial node when file is opened"""
         vid = view.id()
         text = view.substr(sublime.Region(0, view.size()))
         with lock:
@@ -52,7 +60,6 @@ class UndoTreeListener(sublime_plugin.EventListener):
     def on_post_save_async(self, view):
         if view.is_loading():
             return
-
         vid = view.id()
         text = view.substr(sublime.Region(0, view.size()))
         with lock:
@@ -64,62 +71,67 @@ class UndoTreeListener(sublime_plugin.EventListener):
     def on_post_save_as_async(self, view):
         self.on_post_save_async(view)
 
-# UndoTree UI commands
+# =============================
+# UndoTree UI Command
+# =============================
+
 class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
     def run(self):
         self.view = self.window.active_view()
         if not self.view:
             return
-
         self.tree = undo_trees.get(self.view.id())
         if not self.tree:
             sublime.message_dialog("No undo history yet. Save the file first.")
             return
 
+        # Flatten tree with branch depth
         self.nodes = []
-        self.flatten(self.tree.root)
-        items = [self.summarize(n.diff) for n in self.nodes]
+        self.flatten(self.tree.root, 0)
 
-        # Show quick panel with live highlight preview
+        # Display lines with indentation + counter
+        items = []
+        for idx, (node, depth) in enumerate(self.nodes, 1):  # start counter from 1
+            prefix = "  " * depth
+            summary = self.summarize(node.diff)
+            marker = "*" if node == self.tree.current else " "
+            # Add counter before +/-
+            items.append(f"{marker}{prefix}{idx} -> {summary}")
+
+        # Show quick panel with hover preview if supported
         try:
-            # Modern builds supporting on_highlight
             self.window.show_quick_panel(
                 items,
-                self.on_select,       # called when user presses Enter
+                self.on_select,
                 sublime.MONOSPACE_FONT,
-                -1,                   # selected_index
-                self.on_highlight     # called when item is highlighted
+                -1,
+                self.on_highlight
             )
         except TypeError:
-            # Fallback for older builds (no live preview)
+            # fallback for older builds
             self.window.show_quick_panel(
                 items,
                 self.on_select,
                 sublime.MONOSPACE_FONT
             )
 
-    def flatten(self, node):
-        self.nodes.append(node)
+    def flatten(self, node, depth=0):
+        self.nodes.append((node, depth))
         for child in node.children:
-            self.flatten(child)
+            self.flatten(child, depth + 1)
 
     def summarize(self, diff):
         if diff == "Initial state":
             return "Initial state"
-        added = 0
-        removed = 0
-        for line in diff.splitlines():
-            if line.startswith("+") and not line.startswith("+++"):
-                added += 1
-            elif line.startswith("-") and not line.startswith("---"):
-                removed += 1
-        return "+{:<3}  -{:<3}".format(added, removed)
+        added = sum(1 for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in diff.splitlines() if l.startswith("-") and not l.startswith("---"))
+        return f"+{added:<3}  -{removed:<3}"
 
     # Called when user presses Enter
     def on_select(self, index):
         if index == -1:
             return
-        node = self.nodes[index]
+        node, _ = self.nodes[index]
         undo_trees[self.view.id()].current = node
         self.show_diff_preview(node.diff)
         self.view.run_command("undo_tree_restore", {"text": node.text})
@@ -128,7 +140,7 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
     def on_highlight(self, index):
         if index == -1:
             return
-        node = self.nodes[index]
+        node, _ = self.nodes[index]
         self.show_diff_preview(node.diff)
 
     def show_diff_preview(self, diff_text):
@@ -139,7 +151,9 @@ class ShowUndoTreeCommand(sublime_plugin.WindowCommand):
         panel.assign_syntax("Packages/Diff/Diff.sublime-syntax")
         self.window.run_command("show_panel", {"panel": "output." + PREVIEW_PANEL_NAME})
 
+# =============================
 # Text commands
+# =============================
 class UndotreeWritePreviewCommand(sublime_plugin.TextCommand):
     def run(self, edit, text):
         self.view.replace(
