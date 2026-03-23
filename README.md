@@ -1,5 +1,8 @@
 # UndoTree for Sublime Text
 
+[![Package Control](https://img.shields.io/packagecontrol/dt/UndoTree?style=flat-square)](https://packagecontrol.io/packages/UndoTree)
+[![Sublime Text](https://img.shields.io/badge/Sublime%20Text-3%20%7C%204-orange?style=flat-square)](https://www.sublimetext.com/)
+
 A **Vim-style UndoTree plugin** for Sublime Text 4 (Python 3.8+), visualizing undo history as a **branching ASCII tree** with live diff previews.
 
 ![preview](./preview.png)
